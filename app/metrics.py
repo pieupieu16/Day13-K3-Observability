@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections import Counter
 from statistics import mean
 
@@ -7,9 +8,12 @@ REQUEST_LATENCIES: list[int] = []
 REQUEST_COSTS: list[float] = []
 REQUEST_TOKENS_IN: list[int] = []
 REQUEST_TOKENS_OUT: list[int] = []
+REQUEST_TIMESTAMPS: list[float] = []
 ERRORS: Counter[str] = Counter()
 TRAFFIC: int = 0
 QUALITY_SCORES: list[float] = []
+
+WINDOW_SECONDS: float = 60.0
 
 
 def record_request(latency_ms: int, cost_usd: float, tokens_in: int, tokens_out: int, quality_score: float) -> None:
@@ -19,13 +23,18 @@ def record_request(latency_ms: int, cost_usd: float, tokens_in: int, tokens_out:
     REQUEST_COSTS.append(cost_usd)
     REQUEST_TOKENS_IN.append(tokens_in)
     REQUEST_TOKENS_OUT.append(tokens_out)
+    REQUEST_TIMESTAMPS.append(time.time())
     QUALITY_SCORES.append(quality_score)
-
 
 
 def record_error(error_type: str) -> None:
     ERRORS[error_type] += 1
 
+
+def record_token_cost(tokens_in: int, tokens_out: int, cost_usd: float) -> None:
+    REQUEST_TOKENS_IN.append(tokens_in)
+    REQUEST_TOKENS_OUT.append(tokens_out)
+    REQUEST_COSTS.append(cost_usd)
 
 
 def percentile(values: list[int], p: int) -> float:
@@ -36,10 +45,22 @@ def percentile(values: list[int], p: int) -> float:
     return float(items[idx])
 
 
+def error_rate_pct() -> float:
+    if TRAFFIC == 0:
+        return 0.0
+    return round((sum(ERRORS.values()) / TRAFFIC) * 100, 2)
+
+
+def traffic_rate_per_minute() -> float:
+    cutoff = time.time() - WINDOW_SECONDS
+    recent = [ts for ts in REQUEST_TIMESTAMPS if ts >= cutoff]
+    return round(len(recent) * (WINDOW_SECONDS / max(len(recent), 1)), 2) if recent else 0.0
+
 
 def snapshot() -> dict:
     return {
         "traffic": TRAFFIC,
+        "traffic_rate_per_minute": traffic_rate_per_minute(),
         "latency_p50": percentile(REQUEST_LATENCIES, 50),
         "latency_p95": percentile(REQUEST_LATENCIES, 95),
         "latency_p99": percentile(REQUEST_LATENCIES, 99),
@@ -47,6 +68,7 @@ def snapshot() -> dict:
         "total_cost_usd": round(sum(REQUEST_COSTS), 4),
         "tokens_in_total": sum(REQUEST_TOKENS_IN),
         "tokens_out_total": sum(REQUEST_TOKENS_OUT),
+        "error_rate_pct": error_rate_pct(),
         "error_breakdown": dict(ERRORS),
         "quality_avg": round(mean(QUALITY_SCORES), 4) if QUALITY_SCORES else 0.0,
     }

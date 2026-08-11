@@ -27,8 +27,22 @@ REQUIRED_PANEL_FIELDS = (
     "threshold",
 )
 
+REQUIRED_SLO_IDS = frozenset(
+    {"latency_p95_ms", "error_rate_pct", "daily_cost_usd", "quality_score_avg"}
+)
+ALLOWED_ALERT_SEVERITIES = frozenset({"info", "warning", "critical"})
+REQUIRED_ALERT_FIELDS = ("name", "severity", "condition", "type", "owner", "runbook")
+
 
 class DashboardConfigError(ValueError):
+    pass
+
+
+class SloConfigError(ValueError):
+    pass
+
+
+class AlertRulesError(ValueError):
     pass
 
 
@@ -93,6 +107,69 @@ def load_dashboard_config(path: Path) -> dict:
     return payload
 
 
+def load_slo_config(path: Path) -> dict:
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SloConfigError(f"Không tìm thấy SLO config: {path}") from exc
+    except yaml.YAMLError as exc:
+        raise SloConfigError(f"SLO config không phải YAML hợp lệ: {exc}") from exc
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("slis"), dict):
+        raise SloConfigError("Thiếu object 'slis'")
+    service = payload.get("service")
+    if not isinstance(service, str) or not service.strip():
+        raise SloConfigError("'service' phải là chuỗi không rỗng")
+    window = payload.get("window")
+    if not isinstance(window, str) or not window.strip():
+        raise SloConfigError("'window' phải là chuỗi không rỗng")
+
+    slis = payload["slis"]
+    sli_ids = set(slis)
+    if sli_ids != REQUIRED_SLO_IDS:
+        missing = ", ".join(sorted(REQUIRED_SLO_IDS - sli_ids)) or "không"
+        extra = ", ".join(sorted(sli_ids - REQUIRED_SLO_IDS)) or "không"
+        raise SloConfigError(f"SLI không đúng; thiếu: {missing}; không hỗ trợ: {extra}")
+
+    for sli_id, spec in slis.items():
+        if not isinstance(spec, dict):
+            raise SloConfigError(f"'slis.{sli_id}' phải là một YAML object")
+        if not isinstance(spec.get("objective"), (int, float)):
+            raise SloConfigError(f"'slis.{sli_id}.objective' phải là một số")
+        target = spec.get("target")
+        if not isinstance(target, (int, float)) or not 0 < target <= 100:
+            raise SloConfigError(f"'slis.{sli_id}.target' phải nằm trong khoảng 0–100")
+
+    return payload
+
+
+def load_alert_rules(path: Path) -> dict:
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise AlertRulesError(f"Không tìm thấy alert rules: {path}") from exc
+    except yaml.YAMLError as exc:
+        raise AlertRulesError(f"Alert rules không phải YAML hợp lệ: {exc}") from exc
+
+    alerts = payload.get("alerts") if isinstance(payload, dict) else None
+    if not isinstance(alerts, list) or not alerts:
+        raise AlertRulesError("'alerts' phải là danh sách không rỗng")
+
+    for index, alert in enumerate(alerts):
+        if not isinstance(alert, dict):
+            raise AlertRulesError(f"alerts[{index}] phải là một YAML object")
+        for field in REQUIRED_ALERT_FIELDS:
+            value = alert.get(field)
+            if not isinstance(value, str) or not value.strip() or "TODO" in value:
+                raise AlertRulesError(f"alerts[{index}].{field} bị thiếu hoặc vẫn là TODO")
+        if alert["severity"] not in ALLOWED_ALERT_SEVERITIES:
+            raise AlertRulesError(
+                f"alerts[{index}].severity chỉ nhận 'info', 'warning' hoặc 'critical'"
+            )
+
+    return payload
+
+
 def main() -> int:
     configure_utf8_stdio()
     parser = argparse.ArgumentParser(description="Kiểm tra dashboard contract của Day 13")
@@ -102,15 +179,47 @@ def main() -> int:
         default=REPO_ROOT / "config" / "dashboard.yaml",
         help="Đường dẫn tới dashboard YAML",
     )
+    parser.add_argument(
+        "--slo-config",
+        type=Path,
+        default=REPO_ROOT / "config" / "slo.yaml",
+        help="Đường dẫn tới SLO YAML",
+    )
+    parser.add_argument(
+        "--alerts-config",
+        type=Path,
+        default=REPO_ROOT / "config" / "alert_rules.yaml",
+        help="Đường dẫn tới alert rules YAML",
+    )
     args = parser.parse_args()
 
+    dashboard_ok = True
     try:
         load_dashboard_config(args.config)
     except DashboardConfigError as exc:
-        print(f"KHÔNG HỢP LỆ: {exc}")
+        dashboard_ok = False
+        print(f"KHÔNG HỢP LỆ dashboard: {exc}")
+
+    slo_ok = True
+    try:
+        load_slo_config(args.slo_config)
+    except SloConfigError as exc:
+        slo_ok = False
+        print(f"KHÔNG HỢP LỆ slo: {exc}")
+
+    alerts_ok = True
+    try:
+        load_alert_rules(args.alerts_config)
+    except AlertRulesError as exc:
+        alerts_ok = False
+        print(f"KHÔNG HỢP LỆ alerts: {exc}")
+
+    if not (dashboard_ok and slo_ok and alerts_ok):
         return 1
 
     print(f"HỢP LỆ: {len(REQUIRED_PANEL_IDS)}/6 panel có trong dashboard contract.")
+    print("HỢP LỆ: SLO config.")
+    print("HỢP LỆ: Alert rules.")
     return 0
 
 

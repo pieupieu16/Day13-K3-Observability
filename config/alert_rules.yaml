@@ -1,19 +1,19 @@
 alerts:
-  - name: TODO_alert_1
-    severity: TODO
-    condition: TODO
+  - name: HighLatencyP95
+    severity: warning
+    condition: "latency_p95 > 3000ms duy tri 5 phut"
     type: symptom-based
-    owner: TODO
+    owner: dev3-dashboard
     runbook: docs/alerts.md#alert-1
-  - name: TODO_alert_2
-    severity: TODO
-    condition: TODO
+  - name: HighErrorRate
+    severity: critical
+    condition: "error_rate_pct > 2% duy tri 5 phut"
     type: symptom-based
-    owner: TODO
+    owner: dev3-dashboard
     runbook: docs/alerts.md#alert-2
-  - name: TODO_alert_3
-    severity: TODO
-    condition: TODO
+  - name: CostSpike
+    severity: warning
+    condition: "total_cost_usd > 2.5 USD trong cua so 1 phut"
     type: symptom-based
-    owner: TODO
+    owner: dev3-dashboard
     runbook: docs/alerts.md#alert-3
