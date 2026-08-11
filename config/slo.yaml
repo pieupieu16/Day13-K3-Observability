@@ -4,13 +4,16 @@ slis:
   latency_p95_ms:
     objective: 3000
     target: 99.5
-    note: Replace with your group's target
+    note: "SLO: P95 latency duoi 3000ms trong 99.5% khoang 1 phut"
   error_rate_pct:
     objective: 2
     target: 99.0
+    note: "SLO: error rate <= 2% requests trong 99% khoang 1 phut"
   daily_cost_usd:
     objective: 2.5
     target: 100.0
+    note: "SLO: chi phi khong vuot 2.5 USD moi ngay trong 100% ngay"
   quality_score_avg:
     objective: 0.75
     target: 95.0
+    note: "SLO: diem quality proxy trung binh >= 0.75 trong 95% khoang 1 phut"
