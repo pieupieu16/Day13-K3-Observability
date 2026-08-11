@@ -11,7 +11,7 @@ from .agent import LabAgent
 from .incidents import disable, enable, status
 from .logging_config import configure_logging, get_logger
 from .metrics import record_error, snapshot
-from .middleware import CorrelationIdMiddleware
+from .middleware import CorrelationIdMiddleware, rate_limiter
 from .pii import hash_user_id, summarize_text
 from .schemas import ChatRequest, ChatResponse
 from .tracing import tracing_enabled
@@ -71,6 +71,26 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         model=model,
         env=env,
     )
+
+    # Rate Limit Check (Max 16 requests per minute per user)
+    allowed, remaining, reset_in = rate_limiter.is_allowed(user_id_hash)
+    if not allowed:
+        record_error("RateLimitExceeded")
+        log.warning(
+            "rate_limit_exceeded",
+            service="api",
+            error_type="RateLimitExceeded",
+            payload={
+                "user_id_hash": user_id_hash,
+                "limit": rate_limiter.max_requests,
+                "reset_in_seconds": reset_in,
+            },
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded: Maximum {rate_limiter.max_requests} prompts per minute allowed. Try again in {reset_in}s.",
+            headers={"Retry-After": str(int(reset_in) + 1)},
+        )
 
     log.info(
         "request_received",
