@@ -87,3 +87,20 @@ def resolve_prompt(
         version="local-v1",
         source="local",
     )
+
+
+def get_active_prompt(
+    client: Any,
+    *,
+    feature: str,
+    docs: list[str],
+    message: str,
+    enabled: bool,
+) -> ResolvedPrompt:
+    return resolve_prompt(
+        client,
+        feature=feature,
+        docs=docs,
+        message=message,
+        enabled=enabled,
+    )

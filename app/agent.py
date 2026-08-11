@@ -7,8 +7,8 @@ from . import metrics
 from .mock_llm import FakeLLM
 from .mock_rag import retrieve
 from .pii import hash_user_id, summarize_text
-from .prompt_management import resolve_prompt
-from .tracing import get_langfuse_client, observe, tracing_enabled
+from .prompt_management import get_active_prompt
+from .tracing import get_langfuse_client, observe, trace_llm_call, tracing_enabled
 
 
 @dataclass
@@ -31,7 +31,7 @@ class LabAgent:
         started = time.perf_counter()
         docs = retrieve(message)
         langfuse_client = get_langfuse_client()
-        prompt = resolve_prompt(
+        prompt = get_active_prompt(
             langfuse_client,
             feature=feature,
             docs=docs,
@@ -43,26 +43,23 @@ class LabAgent:
         latency_ms = int((time.perf_counter() - started) * 1000)
         cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
 
-        langfuse_client.update_current_trace(
-            user_id=hash_user_id(user_id),
+        prompt_metadata = {
+            "prompt_name": prompt.name,
+            "prompt_label": prompt.label,
+            "prompt_version": prompt.version,
+            "prompt_source": prompt.source,
+        }
+        trace_llm_call(
+            langfuse_client,
+            user_id_hash=hash_user_id(user_id),
             session_id=session_id,
             tags=["lab", feature, self.model],
-            metadata={
-                "prompt_name": prompt.name,
-                "prompt_label": prompt.label,
-                "prompt_version": prompt.version,
-                "prompt_source": prompt.source,
-            },
-        )
-        langfuse_client.update_current_generation(
+            trace_metadata=prompt_metadata,
             model=self.model,
-            metadata={
+            generation_metadata={
                 "doc_count": len(docs),
                 "query_preview": summarize_text(message),
-                "prompt_name": prompt.name,
-                "prompt_label": prompt.label,
-                "prompt_version": prompt.version,
-                "prompt_source": prompt.source,
+                **prompt_metadata,
                 "prompt_fetch_error": prompt.fetch_error,
             },
             usage_details={

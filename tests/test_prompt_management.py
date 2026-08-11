@@ -134,3 +134,20 @@ def test_sdk_fallback_is_not_reported_as_managed_prompt() -> None:
     assert resolved.version == "local-v1"
     assert resolved.fetch_error == "LangfuseFallback"
     assert resolved.managed_prompt is None
+
+
+def test_get_active_prompt_exposes_developer_2_interface() -> None:
+    from app.prompt_management import get_active_prompt
+
+    resolved = get_active_prompt(
+        UnexpectedPromptClient(),
+        feature="qa",
+        docs=["Trace every LLM call"],
+        message="How do we debug prompts?",
+        enabled=False,
+    )
+
+    assert resolved.name == "day13-chat"
+    assert resolved.label == "production"
+    assert resolved.version == "local-v1"
+    assert resolved.text == "Feature=qa\nDocs=Trace every LLM call\nQuestion=How do we debug prompts?"
