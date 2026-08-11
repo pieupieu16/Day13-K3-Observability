@@ -52,9 +52,12 @@ def error_rate_pct() -> float:
 
 
 def traffic_rate_per_minute() -> float:
+    """Số request/phút trong cửa sổ trượt WINDOW_SECONDS gần nhất."""
     cutoff = time.time() - WINDOW_SECONDS
     recent = [ts for ts in REQUEST_TIMESTAMPS if ts >= cutoff]
-    return round(len(recent) * (WINDOW_SECONDS / max(len(recent), 1)), 2) if recent else 0.0
+    if not recent:
+        return 0.0
+    return round(len(recent) * (60.0 / WINDOW_SECONDS), 2)
 
 
 def snapshot() -> dict:
