@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from structlog.contextvars import bind_contextvars
 
 from .agent import LabAgent
@@ -17,6 +18,7 @@ from .tracing import tracing_enabled
 
 configure_logging()
 log = get_logger()
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = FastAPI(title="Day 13 Observability Lab")
 app.add_middleware(CorrelationIdMiddleware)
 agent = LabAgent()
@@ -42,11 +44,26 @@ async def metrics() -> dict:
     return snapshot()
 
 
+@app.get("/")
+async def index() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard")
+
+
+@app.get("/dashboard")
+async def dashboard() -> FileResponse:
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
+@app.get("/chat-ui")
+async def chat_ui() -> FileResponse:
+    return FileResponse(STATIC_DIR / "chat.html")
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     user_id_hash = hash_user_id(body.user_id)
     env = os.getenv("APP_ENV", "dev")
-    model = os.getenv("MODEL_NAME", getattr(agent, "model_name", "fake-llm"))
+    model = os.getenv("MODEL_NAME", getattr(agent, "model", "fake-llm"))
     bind_contextvars(
         user_id_hash=user_id_hash,
         session_id=body.session_id,
